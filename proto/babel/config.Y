@@ -26,7 +26,7 @@ CF_KEYWORDS(BABEL, INTERFACE, METRIC, RXCOST, HELLO, UPDATE, INTERVAL, PORT,
 	TYPE, WIRED, WIRELESS, TUNNEL, RX, TX, BUFFER, PRIORITY, LENGTH, CHECK,
         LINK, NEXT, HOP, IPV4, IPV6, BABEL_METRIC, SHOW, INTERFACES, NEIGHBORS,
 	ENTRIES, RANDOMIZE, ROUTER, ID, AUTHENTICATION, NONE, MAC, PERMISSIVE,
-        RTT, MIN, MAX, DECAY, SEND, TIMESTAMPS)
+        RTT, MIN, MAX, DECAY, WINLEN, SEND, TIMESTAMPS)
 
 CF_GRAMMAR
 
@@ -77,7 +77,7 @@ babel_iface_start:
   BABEL_IFACE->tx_priority = sk_priority_control;
   BABEL_IFACE->rtt_min = BABEL_RTT_MIN;
   BABEL_IFACE->rtt_max = BABEL_RTT_MAX;
-  BABEL_IFACE->rtt_decay = BABEL_RTT_DECAY;
+  BABEL_IFACE->rtt_win_len = BABEL_RTT_WINLEN;
   BABEL_IFACE->rtt_send = 1;
   BABEL_IFACE->check_link = 1;
 };
@@ -171,7 +171,7 @@ babel_iface_item:
  | RTT MIN expr_us { BABEL_IFACE->rtt_min = $3; }
  | RTT MAX expr_us { BABEL_IFACE->rtt_max = $3; }
  | RTT COST expr { BABEL_IFACE->rtt_cost = $3; if ($3 >= BABEL_INFINITY) cf_error("RTT cost must be < 65535"); }
- | RTT DECAY expr { BABEL_IFACE->rtt_decay = $3; if (($3 < 1) || ($3 > 256)) cf_error("RTT decay must be between 1-256"); }
+ | RTT WINLEN expr { BABEL_IFACE->rtt_win_len = $3; if (($3 < 1) || ($3 > 65535)) cf_error("RTT winlen must be between 1-65535"); }
  | SEND TIMESTAMPS bool { BABEL_IFACE->rtt_send = $3; }
  | password_list
  ;
