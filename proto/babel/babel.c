@@ -536,6 +536,10 @@ babel_get_neighbor(struct babel_iface *ifa, ip_addr addr)
   init_list(&nbr->requests);
   add_tail(&ifa->neigh_list, NODE nbr);
 
+  nbr->srtt_pool = mb_allocz(ifa->pool, ifa->cf->rtt_win_len*sizeof(btime));
+  nbr->srtt_pool_sorted = mb_allocz(ifa->pool, ifa->cf->rtt_win_len*sizeof(btime));
+  nbr->srtt_poll_idx = nbr->srtt_pool_len = 0;
+
   return nbr;
 }
 
@@ -560,6 +564,8 @@ babel_flush_neighbor(struct babel_proto *p, struct babel_neighbor *nbr)
 
   nbr->ifa = NULL;
   rem_node(NODE nbr);
+  mb_free(nbr->srtt_pool);
+  mb_free(nbr->srtt_pool_sorted);
   mb_free(nbr);
 }
 
@@ -1321,6 +1327,21 @@ babel_handle_hello(union babel_msg *m, struct babel_iface *ifa)
   }
 }
 
+static int
+babel_btime_cmp(const void *b1, const void *b2)
+{
+  btime r;
+  switch (r = *(btime*)b1 - *(btime*)b2)
+  {
+  case 0:
+    return 0;
+    break;
+  default:
+    return r > (btime)0 ? 1 : -1;
+    break;
+  }
+}
+
 void
 babel_handle_ihu(union babel_msg *m, struct babel_iface *ifa)
 {
@@ -1358,12 +1379,24 @@ babel_handle_ihu(union babel_msg *m, struct babel_iface *ifa)
 
     if (n->srtt)
     {
-      uint decay = n->ifa->cf->rtt_decay;
-
-      n->srtt = (decay * rtt_sample + (256 - decay) * n->srtt) / 256;
+      u16 pool_idx = n->srtt_poll_idx % n->ifa->cf->rtt_win_len;
+      n->srtt_poll_idx = pool_idx + 1;
+      *(n->srtt_pool + pool_idx) = rtt_sample;
+      if (n->srtt_pool_len < n->ifa->cf->rtt_win_len)
+        n->srtt_pool_len++;
+      memcpy(n->srtt_pool_sorted, n->srtt_pool, (size_t)n->srtt_pool_len*sizeof(btime));
+      // use qsort for now for testing
+      qsort(n->srtt_pool_sorted, (size_t)n->srtt_pool_len, sizeof(btime), babel_btime_cmp);
+      int mid = n->srtt_pool_len / (u16)2;
+      if (!n->srtt_pool_len || n->srtt_pool_len % (u16)2)
+        n->srtt = *(n->srtt_pool_sorted + mid);
+      else
+        n->srtt = (*(n->srtt_pool_sorted + mid - (u16)1) + *(n->srtt_pool_sorted + mid)) / (u16)2;
     }
-    else
-      n->srtt = rtt_sample;
+    else {
+      *(n->srtt_pool) = n->srtt = rtt_sample;
+      n->srtt_poll_idx = n->srtt_pool_len = 1;
+    }
 
     TRACE(D_EVENTS, "RTT sample for neighbour %I on %s: %u us (srtt %u.%03u ms)",
           n->addr, ifa->ifname, rtt_sample, n->srtt/1000, n->srtt%1000);

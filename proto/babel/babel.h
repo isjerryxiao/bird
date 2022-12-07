@@ -59,7 +59,7 @@
 #define BABEL_RTT_MAX_VALUE		(600 S_)
 #define BABEL_RTT_MIN			(10 MS_)
 #define BABEL_RTT_MAX			(120 MS_)
-#define BABEL_RTT_DECAY			42
+#define BABEL_RTT_WINLEN			100
 
 /*
  * Constants for calculating metric smoothing. Chosen so that:
@@ -164,7 +164,7 @@ struct babel_iface_config {
   btime rtt_min;			/* rtt above which to start penalising metric */
   btime rtt_max;			/* max rtt metric penalty applied above this */
   u16 rtt_cost;			/* metric penalty to apply at rtt_max */
-  u16 rtt_decay;			/* decay of neighbour RTT (units of 1/256) */
+  u16 rtt_win_len;			/* smoothing windows length */
   u8  rtt_send;			/* whether to send timestamps on this interface */
 
   u16 rx_buffer;			/* RX buffer size, 0 for MTU */
@@ -257,6 +257,10 @@ struct babel_neighbor {
   u32 last_tstamp;
   btime last_tstamp_rcvd;
   btime srtt;
+  btime *srtt_pool;  // an array of btime
+  btime *srtt_pool_sorted;
+  u16 srtt_pool_len; // initial length
+  u16 srtt_poll_idx; // head
 
   u32 auth_pc;
   u8 auth_passed;
